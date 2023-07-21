@@ -171,3 +171,12 @@ INFO:__main__:Sending finish
 ```
 
 After that, you can interact with the application normally [as explained above](#interacting-with-the-application).
+
+## Cast commands
+
+Deposit:
+yarn start erc20 deposit --amount 100000 --erc20 0x4ed7c70F96B99c776995fB64377f0d4aB3B0e1C1
+
+Read balance:
+
+curl "http://localhost:5005/inspect/balance?token=0x4ed7c70F96B99c776995fB64377f0d4aB3B0e1C1&wallet=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92262"

@@ -2,4 +2,5 @@ version: "3"
 
 services:
   server_manager:
+    platform: linux/amd64
     image: ${DAPP_IMAGE:-cartesi/dapp:dca.monster-devel-server}

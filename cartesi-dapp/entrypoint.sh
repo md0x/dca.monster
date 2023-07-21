@@ -13,4 +13,4 @@
 
 set -e
 export PATH="/opt/venv/bin:$PATH"
-rollup-init python3 -m dapp.dca.monster
+rollup-init python3 -m dapp.dca

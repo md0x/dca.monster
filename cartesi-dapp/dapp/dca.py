@@ -14,10 +14,11 @@ import json
 import logging
 import traceback
 from os import environ
+from urllib.parse import parse_qs, urlparse
 
 import requests
-from eth_abi_ext import decode_packed
-from streamabletoken import StreamableToken
+from dapp.eth_abi_ext import decode_packed
+from dapp.streamabletoken import StreamableToken
 
 logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
@@ -170,9 +171,26 @@ def handle_advance(data):
 def handle_inspect(data):
     logger.info(f"Received inspect request data {data}")
     logger.info("Adding report")
-    response = requests.post(
-        rollup_server + "/report", json={"payload": data["payload"]}
-    )
+    # decode payload as a URL
+    url = urlparse(hex2str(data["payload"]))
+    if url.path == "balance":
+        # parse query parameters
+        query_params = parse_qs(url.query)
+        token_address = query_params.get("token")
+        wallet = query_params.get("wallet")
+
+        if not token_address or not wallet:
+            return requests.post(
+                rollup_server + "/report", json={"error": "Missing query parameters"}
+            )
+
+        token = StreamableToken(token_address[0])
+
+        response = requests.post(
+            rollup_server + "/report",
+            json={"payload": str2hex(str(token.balance_of(wallet[0])))},
+        )
+
     logger.info(f"Received report status {response.status_code}")
     return "accept"
 

@@ -2,6 +2,7 @@ version: "3"
 
 services:
   server_manager:
+    platform: linux/amd64
     image: cartesi/host-server-manager:0.9.1
     ports:
       - "5004:5004"

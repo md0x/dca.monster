@@ -116,6 +116,7 @@ services:
       SNAPSHOT_LATEST: /var/opt/cartesi/machine-snapshots/latest
 
   server_manager:
+    platform: linux/amd64
     restart: always
     ports:
       - "5001:5001"
