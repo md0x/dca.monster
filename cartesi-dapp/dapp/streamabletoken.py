@@ -1,7 +1,10 @@
 import json
 import time
+import uuid
 
 from eth_utils import to_checksum_address
+
+empty_storage = {"balances": {}, "streams": {}, "totalSupply": 0}
 
 
 class StreamableToken:
@@ -11,6 +14,56 @@ class StreamableToken:
 
     def __init__(self, address: str):
         self._address = to_checksum_address(address)  # layer 1 address
+        # create storage file if it doesn't exist
+        with open("./storage/balances.json", "a+") as f:
+            f.seek(0)
+            if len(f.read(1)) == 0:
+                f.write("{}")
+
+    def get_storage(self):
+        """
+        Get the storage file.
+        """
+        with open("./storage/balances.json", "r") as f:
+            data = json.load(f)
+        return data.get(self._address, empty_storage)
+
+    def save_storage(self, balances):
+        """
+        Save the storage file.
+        """
+        # Load existing balances
+        with open("./storage/balances.json", "r") as f:
+            existing_balances = json.load(f)
+
+        # Update existing balances
+        existing_balances[self._address] = balances
+
+        # Save updated balances
+        with open("./storage/balances.json", "w") as f:
+            json.dump(existing_balances, f, indent=4)
+
+    def clear_storage(self):
+        """
+        Clear the storage file for this token only. Useful for testing.
+        """
+        self.save_storage(empty_storage)
+
+    def get_total_supply(self):
+        """
+        Get the total supply of tokens.
+        """
+        return self.get_storage().get("totalSupply", 0)
+
+    def get_theoric_total_supply(self):
+        """
+        Get the total supply of tokens. For testing purposes only.
+        """
+        # Iterate over addresses and sum balance of in max timestamp
+        total_supply = 0
+        for address in self.get_storage()["balances"]:
+            total_supply += self.balance_of(address, 2**256 - 1)
+        return total_supply
 
     def mint(self, wallet: str, amount: int):
         """
@@ -18,26 +71,22 @@ class StreamableToken:
         """
         wallet = to_checksum_address(wallet)
 
-        # Load existing balances
-        with open("./storage/balances.json", "r") as f:
-            balances = json.load(f)
+        storage = self.get_storage()
 
         # If address exists
-        if self._address in balances:
-            # If wallet exists
-            if wallet in balances[self._address]["balances"]:
-                # Increment balance
-                balances[self._address]["balances"][wallet] += amount
-            else:
-                # Add wallet with new balance
-                balances[self._address]["balances"][wallet] = amount
-        else:
-            # Add address and wallet with new balance
-            balances[self._address] = {"balances": {wallet: amount}, "streams": {}}
 
-        # Write updated balances
-        with open("./storage/balances.json", "w") as f:
-            json.dump(balances, f, indent=4)
+        # If wallet exists
+        if wallet in storage["balances"]:
+            # Increment balance
+            storage["balances"][wallet] += amount
+        else:
+            # Add wallet with new balance
+            storage["balances"][wallet] = amount
+        # Increment total supply
+        storage["totalSupply"] += amount
+
+        # Save storage
+        self.save_storage(storage)
 
     def balance_of(self, wallet: str, timestamp: int = None):
         """
@@ -50,22 +99,18 @@ class StreamableToken:
         if timestamp is None:
             timestamp = int(time.time())
 
-        # Load existing balances
-        with open("./storage/balances.json", "r") as f:
-            data = json.load(f)
-
         # Get the balance and streams for this token's address
-        token_data = data.get(self._address, {"balances": {}, "streams": {}})
+        storage = self.get_storage()
 
         # Start with the minted balance
-        balance = token_data["balances"].get(wallet, 0)
+        balance = storage["balances"].get(wallet, 0)
 
         # Prepare keys to search for streams related to the given wallet
-        keys = [key for key in token_data["streams"].keys() if wallet in key]
+        keys = [key for key in storage["streams"].keys() if wallet in key]
 
         # Iterate over keys related to the given wallet
         for key in keys:
-            stream = token_data["streams"][key]
+            stream = storage["streams"][key]
             # If the stream has started
             if stream["start"] <= timestamp:
                 # Calculate the amount of tokens streamed so far
@@ -97,20 +142,20 @@ class StreamableToken:
         if start is None:
             start = int(time.time())
 
-        # Load existing balances
-        with open("./storage/balances.json", "r") as f:
-            data = json.load(f)
-
         # Get the balance and streams for this token's address
-        token_data = data.get(self._address, {"balances": {}, "streams": {}})
+        storage = self.get_storage()
 
         # Check that the sender has enough balance at the start time to initiate the stream
         if self.balance_of(sender, start) < amount:
             raise ValueError("Insufficient balance to initiate the stream.")
 
+        # Init balance of receiver if not exists.
+        if receiver not in storage["balances"]:
+            storage["balances"][receiver] = 0
+
         # Create a new stream
-        stream_id = f"{sender}-{receiver}"
-        token_data["streams"][stream_id] = {
+        stream_id = f"{sender}-{receiver}-{str(uuid.uuid4())}"
+        storage["streams"][stream_id] = {
             "from": sender,
             "to": receiver,
             "amount": amount,
@@ -118,14 +163,9 @@ class StreamableToken:
             "duration": duration,
         }
 
-        # Update the balances and streams
-        data[self._address] = token_data
+        self.save_storage(storage)
 
-        # Write the updated data back to the file
-        with open("./storage/balances.json", "w") as f:
-            json.dump(data, f, indent=4)
-
-    def accrue(self, until_timestamp: int = None):
+    def consolidate_streams(self, until_timestamp: int = None):
         """
         Accrue all the sent and received tokens from streams until a specific timestamp.
         """
@@ -134,18 +174,14 @@ class StreamableToken:
         if until_timestamp is None:
             until_timestamp = int(time.time())
 
-        # Load existing balances
-        with open("./storage/balances.json", "r") as f:
-            data = json.load(f)
-
         # Get the balance and streams for this token's address
-        token_data = data.get(self._address, {"balances": {}, "streams": {}})
+        storage = self.get_storage()
 
         # List to store streams to delete after processing
         streams_to_delete = []
 
         # Iterate over streams
-        for stream_id, stream in token_data["streams"].items():
+        for stream_id, stream in storage["streams"].items():
             # If the stream has started
             if stream["start"] <= until_timestamp:
                 # Calculate the elapsed time and the amount of tokens to stream
@@ -153,12 +189,12 @@ class StreamableToken:
                 to_stream = stream["amount"] * elapsed / stream["duration"]
 
                 # Update the sender's balance
-                if stream["from"] in token_data["balances"]:
-                    token_data["balances"][stream["from"]] -= to_stream
+                if stream["from"] in storage["balances"]:
+                    storage["balances"][stream["from"]] -= to_stream
 
                 # Update the receiver's balance
-                if stream["to"] in token_data["balances"]:
-                    token_data["balances"][stream["to"]] += to_stream
+                if stream["to"] in storage["balances"]:
+                    storage["balances"][stream["to"]] += to_stream
 
                 # Update the stream amount
                 stream["amount"] -= to_stream
@@ -169,14 +205,9 @@ class StreamableToken:
 
         # Delete finished streams
         for stream_id in streams_to_delete:
-            del token_data["streams"][stream_id]
+            del storage["streams"][stream_id]
 
-        # Update the balances and streams
-        data[self._address] = token_data
-
-        # Write the updated data back to the file
-        with open("./storage/balances.json", "w") as f:
-            json.dump(data, f, indent=4)
+        self.save_storage(storage)
 
     def cancel_stream(self, stream_id: str, sender: str):
         """
@@ -186,26 +217,22 @@ class StreamableToken:
 
         # Accrue the balances up to the current time to account for the canceled stream
         # If the stream is not found, the balances will be accrued up to the current time
-        self.accrue()
+        self.consolidate_streams()
 
         # Load existing balances
-        with open("./storage/balances.json", "r") as f:
-            data = json.load(f)
-
-        # Get the balance and streams for this token's address
-        token_data = data.get(self._address, {"balances": {}, "streams": {}})
+        storage = self.get_storage()
 
         # Check if the stream exists
-        if stream_id in token_data["streams"]:
+        if stream_id in storage["streams"]:
             # Check if the user is the sender
-            if token_data["streams"][stream_id]["from"] == sender:
+            if storage["streams"][stream_id]["from"] == sender:
                 # Remove the stream
-                del token_data["streams"][stream_id]
+                del storage["streams"][stream_id]
+                # TODO remove any linked stream
             else:
                 print("Only the sender can cancel the stream.")
         else:
             print("Stream not found.")
 
         # Write the updated data back to the file
-        with open("./storage/balances.json", "w") as f:
-            json.dump(data, f, indent=4)
+        self.save_storage(storage)
