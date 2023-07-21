@@ -1,5 +1,5 @@
-from dapp.ammlibrary import get_pair_address, sort_tokens
-from dapp.streamabletoken import StreamableToken
+from ammlibrary import get_pair_address, sort_tokens
+from streamabletoken import StreamableToken
 
 
 class Pair(StreamableToken):
@@ -11,6 +11,6 @@ class Pair(StreamableToken):
 
     def get_reserves(self, timestamp):
         return (
-            self.balance_of(self.token0, timestamp),
-            self.balance_of(self.token1, timestamp),
+            StreamableToken(self.token0).balance_of(self.token0, timestamp),
+            StreamableToken(self.token1).balance_of(self.token1, timestamp),
         )
