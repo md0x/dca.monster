@@ -65,7 +65,7 @@ class StreamableToken:
             total_supply += self.balance_of(address, 2**256 - 1)
         return total_supply
 
-    def mint(self, wallet: str, amount: int):
+    def mint(self, amount: int, wallet: str):
         """
         Mint a given amount of tokens to a given wallet.
         """
@@ -115,7 +115,11 @@ class StreamableToken:
             if stream["start"] <= timestamp:
                 # Calculate the amount of tokens streamed so far
                 elapsed = min(timestamp - stream["start"], stream["duration"])
-                streamed = stream["amount"] * elapsed / stream["duration"]
+                streamed = (
+                    stream["amount"]
+                    if stream["duration"] == 0
+                    else stream["amount"] * elapsed / stream["duration"]
+                )
 
                 # If the stream is to the given wallet, add the streamed tokens to the balance
                 if stream["to"] == wallet:

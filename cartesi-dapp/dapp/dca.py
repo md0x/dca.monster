@@ -77,7 +77,7 @@ def handle_deposit(data):
         depositor = decoded[2]
         amount = decoded[3]
 
-        StreamableToken(erc20).mint(depositor, amount)
+        StreamableToken(erc20).mint(amount, depositor)
 
         # Post notice about the deposit
         notice_str = (
