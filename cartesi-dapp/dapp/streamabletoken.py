@@ -20,6 +20,12 @@ class StreamableToken:
             if len(f.read(1)) == 0:
                 f.write("{}")
 
+    def get_address(self):
+        """
+        Get the address of the token.
+        """
+        return self._address
+
     def get_storage(self):
         """
         Get the storage file.
@@ -87,6 +93,26 @@ class StreamableToken:
 
         # Save storage
         self.save_storage(storage)
+
+    def burn(self, amount: int, wallet: str, timestamp: int):
+        """
+        Burn a given amount of tokens from a given wallet.
+        """
+
+        wallet = to_checksum_address(wallet)
+
+        storage = self.get_storage()
+
+        assert timestamp is not None
+
+        if self.balance_of(wallet, timestamp) < amount:
+            raise ValueError("Insufficient balance to burn.")
+
+        # Decrement balance
+        storage["balances"][wallet] -= amount
+
+        # Decrement total supply
+        storage["totalSupply"] -= amount
 
     def balance_of(self, wallet: str, timestamp: int = None):
         """
@@ -190,7 +216,11 @@ class StreamableToken:
             if stream["start"] <= until_timestamp:
                 # Calculate the elapsed time and the amount of tokens to stream
                 elapsed = min(until_timestamp - stream["start"], stream["duration"])
-                to_stream = stream["amount"] * elapsed / stream["duration"]
+                to_stream = (
+                    stream["amount"]
+                    if stream["duration"] == 0
+                    else stream["amount"] * elapsed / stream["duration"]
+                )
 
                 # Update the sender's balance
                 if stream["from"] in storage["balances"]:
