@@ -12,21 +12,25 @@
 
 import json
 import logging
+import os
 import traceback
 from os import environ
 from urllib.parse import parse_qs, urlparse
 
 import requests
+from dapp.amm import AMM
 from dapp.eth_abi_ext import decode_packed
 from dapp.streamabletoken import StreamableToken
+from dapp.util import hex_to_str
+from eth_abi.abi import encode
 
 logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
 
-rollup_server = environ["ROLLUP_HTTP_SERVER_URL"]
+rollup_server = environ.get("ROLLUP_HTTP_SERVER_URL", "http://127.0.0.1:5004")
 logger.info(f"HTTP rollup_server url is {rollup_server}")
 
-network = environ["NETWORK"]
+network = environ.get("NETWORK", "localhost")
 ERC20PortalFile = open(f"./deployments/{network}/ERC20Portal.json")
 erc20Portal = json.load(ERC20PortalFile)
 
@@ -45,6 +49,11 @@ def str2hex(str):
     return "0x" + str.encode("utf-8").hex()
 
 
+# Function selector to be called during the execution of a voucher that transfers funds,
+# which corresponds to the first 4 bytes of the Keccak256-encoded result of "transfer(address,uint256)"
+TRANSFER_FUNCTION_SELECTOR = b"\xa9\x05\x9c\xbb"
+
+
 def reject_input(msg, payload):
     logger.error(msg)
     response = requests.post(rollup_server + "/report", json={"payload": payload})
@@ -54,15 +63,35 @@ def reject_input(msg, payload):
     return "reject"
 
 
+def get_storage():
+    if os.path.exists("./storage/amm.json"):
+        with open("./storage/amm.json", "r") as f:
+            amm = json.load(f)
+    else:
+        amm = {}
+
+    if os.path.exists("./storage/balances.json"):
+        with open("./storage/balances.json", "r") as f:
+            balances = json.load(f)
+    else:
+        balances = {}
+
+    return amm, balances
+
+
+def restore_storage(amm, balances):
+    if not os.path.exists("./storage"):
+        os.makedirs("./storage")
+
+    with open("./storage/amm.json", "w") as f:
+        json.dump(amm, f, indent=4)
+
+    with open("./storage/balances.json", "w") as f:
+        json.dump(balances, f, indent=4)
+
+
 def handle_deposit(data):
     try:
-        # Check wether an input was sent by the ERC20 Portal,
-        # which is where all deposits must come from
-        if data["metadata"]["msg_sender"].lower() != erc20Portal["address"].lower():
-            return reject_input(
-                f"Input does not come from the ERC20 Portal", data["payload"]
-            )
-
         # Attempt to decode input as an ABI-packed-encoded ERC20 deposit
         binary = bytes.fromhex(data["payload"][2:])
         try:
@@ -79,10 +108,9 @@ def handle_deposit(data):
 
         StreamableToken(erc20).mint(amount, depositor)
 
-        # Post notice about the deposit
-        notice_str = (
-            f"Deposit received from: {depositor}; ERC-20: {erc20}; Amount: {amount}"
-        )
+        # Post notice about the deposit and minting
+        notice_str = f"Deposit received from: {depositor}; ERC-20: {erc20}; Amount: {amount} and minted to {depositor} \
+              corresponding StreamableToken."
         logger.info(f"Adding notice: {notice_str}")
         notice = {"payload": str2hex(notice_str)}
         response = requests.post(rollup_server + "/notice", json=notice)
@@ -90,56 +118,135 @@ def handle_deposit(data):
             f"Received notice status {response.status_code} body {response.content}"
         )
 
-        # # Encode a transfer function call that returns the amount back to the depositor
-        # transfer_payload = TRANSFER_FUNCTION_SELECTOR + encode(['address','uint256'], [depositor, amount])
-        # # Post voucher executing the transfer on the ERC-20 contract: "I don't want your money"!
-        # voucher = {"destination": erc20, "payload": "0x" + transfer_payload.hex()}
-        # logger.info(f"Issuing voucher {voucher}")
-        # response = requests.post(rollup_server + "/voucher", json=voucher)
-        # logger.info(f"Received voucher status {response.status_code} body {response.content}")
-
         return "accept"
 
     except Exception as e:
-        return reject_input(f"Error processing data {data}\n{traceback.format_exc()}")
+        return reject_input(
+            f"Error processing data {data}\n{traceback.format_exc()}", data["payload"]
+        )
+
+
+def handle_action(data):
+    amm, balances = get_storage()
+    try:
+        str_payload = hex_to_str(data["payload"])
+        payload = json.loads(str_payload)
+
+        if payload["method"] == "add_liquidity":
+            AMM().add_liquidity(
+                token_a=payload["args"]["token_a"],
+                token_b=payload["args"]["token_b"],
+                token_a_desired=int(payload["args"]["token_a_desired"]),
+                token_b_desired=int(payload["args"]["token_b_desired"]),
+                token_a_min=int(payload["args"]["token_a_min"]),
+                token_b_min=int(payload["args"]["token_b_min"]),
+                to=payload["args"]["to"],
+                msg_sender=data["metadata"]["msg_sender"],
+                timestamp=int(data["metadata"]["timestamp"]),
+            )
+        elif payload["method"] == "remove_liquidity":
+            AMM().remove_liquidity(
+                token_a=payload["args"]["token_a"],
+                token_b=payload["args"]["token_b"],
+                liquidity=int(payload["args"]["liquidity"]),
+                amount_a_min=int(payload["args"]["amount_a_min"]),
+                amount_b_min=int(payload["args"]["amount_b_min"]),
+                to=payload["args"]["to"],
+                msg_sender=data["metadata"]["msg_sender"],
+                timestamp=int(data["metadata"]["timestamp"]),
+            )
+        elif payload["method"] == "swap":
+            AMM().swap_exact_tokens_for_tokens(
+                amount_in=int(payload["args"]["amount_in"]),
+                amount_out_min=int(payload["args"]["amount_out_min"]),
+                path=payload["args"]["path"],
+                start=int(payload["args"]["start"]),
+                duration=int(payload["args"]["duration"]),
+                to=payload["args"]["to"],
+                msg_sender=data["metadata"]["msg_sender"],
+                timestamp=int(data["metadata"]["timestamp"]),
+            )
+        elif payload["method"] == "stream":
+            StreamableToken(payload["args"]["token"]).transfer_from(
+                sender=data["metadata"]["msg_sender"],
+                receiver=payload["args"]["receiver"],
+                amount=int(payload["args"]["amount"]),
+                duration=int(payload["args"]["duration"]),
+                start=int(payload["args"]["start"]),
+                timestamp=int(data["metadata"]["timestamp"]),
+            )
+        elif payload["method"] == "unwrap":
+            token_address = payload["args"]["token"]
+            token = StreamableToken(payload["args"]["token"])
+            amount = int(data["metadata"]["amount"])
+            msg_sender = data["metadata"]["msg_sender"]
+            token.burn(
+                amount=amount,
+                wallet=msg_sender,
+                timestamp=int(data["metadata"]["timestamp"]),
+            )
+            # Encode a transfer function call that returns the amount back to the depositor
+            transfer_payload = TRANSFER_FUNCTION_SELECTOR + encode(
+                ["address", "uint256"], [msg_sender, amount]
+            )
+            # Post voucher executing the transfer on the ERC-20 contract: "I don't want your money"!
+            voucher = {
+                "destination": token_address,
+                "payload": "0x" + transfer_payload.hex(),
+            }
+            logger.info(f"Issuing voucher {voucher}")
+            response = requests.post(rollup_server + "/voucher", json=voucher)
+            logger.info(
+                f"Received voucher status {response.status_code} body {response.content}"
+            )
+        elif payload["method"] == "cancel_stream":
+            token = StreamableToken(payload["args"]["token"])
+            stream_id_to_cancel = payload["args"]["stream_id"]
+
+            # TODO move this logic somewhere else
+            amm_pairs = AMM().get_storage()["pairs"]
+            streams = token.get_storage()["streams"]
+
+            if streams.get(stream_id_to_cancel) is not None:
+                stream = streams.get(stream_id_to_cancel)
+                token.cancel_stream(
+                    stream_id_to_cancel,
+                    data["metadata"]["msg_sender"],
+                    int(data["metadata"]["timestamp"]),
+                )
+                # Recalculate AMM pair if needed
+                if amm_pairs.get(stream["to"]) is not None:
+                    pair = amm_pairs.get(stream["to"])
+                    AMM().recalculate_pair(
+                        pair.get("token_0"),
+                        pair.get("token_1"),
+                        int(data["metadata"]["timestamp"]),
+                    )
+            else:
+                return reject_input(
+                    f"Stream with id {stream_id_to_cancel} does not exist",
+                    data["payload"],
+                )
+        else:
+            return reject_input(f"Unknown method {payload['method']}", data["payload"])
+
+        notice_str = f"Method {payload['method']} processed from {data['metadata']['msg_sender']} at \
+              {data['metadata']['timestamp']} with payload {str_payload}"
+        logger.info(f"Adding notice: {notice_str}")
+        notice = {"payload": str2hex(notice_str)}
+        response = requests.post(rollup_server + "/notice", json=notice)
+        logger.info(
+            f"Received notice status {response.status_code} body {response.content}"
+        )
+    except Exception as error:
+        restore_storage(amm, balances)
+        error_msg = f"Failed to process command '{str_payload}'. {error}"
+        return reject_input(error_msg, data["payload"])
+
+    return "accept"
 
 
 def handle_advance(data):
-    """
-    An advance request may be processed as follows:
-
-    1. A notice may be generated, if appropriate:
-
-    response = requests.post(rollup_server + "/notice", json={"payload": data["payload"]})
-    logger.info(f"Received notice status {response.status_code} body {response.content}")
-
-    2. During processing, any exception must be handled accordingly:
-
-    try:
-        # Execute sensible operation
-        op.execute(params)
-
-    except Exception as e:
-        # status must be "reject"
-        status = "reject"
-        msg = "Error executing operation"
-        logger.error(msg)
-        response = requests.post(rollup_server + "/report", json={"payload": str2hex(msg)})
-
-    finally:
-        # Close any resource, if necessary
-        res.close()
-
-    3. Finish processing
-
-    return status
-    """
-
-    """
-    The sample code from the Echo DApp simply generates a notice with the payload of the
-    request and print some log messages.
-    """
-
     logger.info(f"Received advance request data {data}")
 
     status = "accept"
@@ -152,7 +259,10 @@ def handle_advance(data):
             f"Received notice status {response.status_code} body {response.content}"
         )
 
-        handle_deposit(data)
+        if data["metadata"]["msg_sender"].lower() == erc20Portal["address"].lower():
+            status = handle_deposit(data)
+        else:
+            status = handle_action(data)
 
     except Exception as e:
         status = "reject"

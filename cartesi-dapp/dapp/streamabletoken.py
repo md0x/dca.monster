@@ -1,6 +1,8 @@
+import copy
 import json
 import time
 import uuid
+from pathlib import Path
 
 from eth_utils import to_checksum_address
 
@@ -14,6 +16,8 @@ class StreamableToken:
 
     def __init__(self, address: str):
         self._address = to_checksum_address(address)  # layer 1 address
+        # create storage folder if it doesn't exist
+        Path("./storage").mkdir(parents=True, exist_ok=True)
         # create storage file if it doesn't exist
         with open("./storage/balances.json", "a+") as f:
             f.seek(0)
@@ -32,7 +36,7 @@ class StreamableToken:
         """
         with open("./storage/balances.json", "r") as f:
             data = json.load(f)
-        return data.get(self._address, empty_storage)
+        return data.get(self._address, copy.deepcopy(empty_storage))
 
     def save_storage(self, balances):
         """
@@ -53,7 +57,7 @@ class StreamableToken:
         """
         Clear the storage file for this token only. Useful for testing.
         """
-        self.save_storage(empty_storage)
+        self.save_storage(copy.deepcopy(empty_storage))
 
     def get_total_supply(self):
         """
@@ -165,7 +169,8 @@ class StreamableToken:
         receiver: str,
         amount: int,
         duration: int,
-        start: int = None,
+        start: int,
+        timestamp: int,
         dir: "list[str]" = [],
     ):
         """
@@ -176,9 +181,10 @@ class StreamableToken:
         sender = to_checksum_address(sender)
         receiver = to_checksum_address(receiver)
 
-        # Use the current time if no start time is given
-        if start is None:
-            start = int(time.time())
+        # Use the current time if no timestamp is 0
+        if start == 0:
+            start = timestamp
+        assert start >= timestamp, "Start time must be greater than current time."
 
         # Get the balance and streams for this token's address
         storage = self.get_storage()
@@ -272,16 +278,14 @@ class StreamableToken:
         storage = self.get_storage()
 
         # Check if the stream exists
-        if stream_id in storage["streams"]:
-            # Check if the user is the sender
-            if storage["streams"][stream_id]["from"] == sender:
-                # Remove the stream
-                del storage["streams"][stream_id]
-                # TODO remove any linked stream
-            else:
-                print("Only the sender can cancel the stream.")
-        else:
-            print("Stream not found.")
+        assert stream_id in storage["streams"], "Stream not found."
+
+        # Check if the user is the sender
+        assert (
+            storage["streams"][stream_id]["from"] == sender
+        ), "Only the sender can cancel the stream."
+
+        del storage["streams"][stream_id]
 
         # Write the updated data back to the file
         self.save_storage(storage)
