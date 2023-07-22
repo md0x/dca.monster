@@ -1,6 +1,5 @@
 import hashlib
 
-from dapp.streamabletoken import StreamableToken
 from eth_utils import to_checksum_address
 
 
@@ -24,18 +23,18 @@ def quote(amount_a, reserve_a, reserve_b):
     assert amount_a > 0, "AmmLibrary: INSUFFICIENT_AMOUNT"
     assert reserve_a > 0 and reserve_b > 0, "AmmLibrary: INSUFFICIENT_LIQUIDITY"
 
-    return (amount_a * reserve_b) // reserve_a
+    return int((amount_a * reserve_b) // reserve_a)
 
 
 def get_amount_out(amount_in, reserve_in, reserve_out):
     if amount_in <= 0:
-        raise ValueError("UniswapV2Library: INSUFFICIENT_INPUT_AMOUNT")
+        raise ValueError("AMM: INSUFFICIENT_INPUT_AMOUNT")
     if reserve_in <= 0 or reserve_out <= 0:
-        raise ValueError("UniswapV2Library: INSUFFICIENT_LIQUIDITY")
+        raise ValueError("AMM: INSUFFICIENT_LIQUIDITY")
 
     amount_in_with_fee = amount_in * 997
     numerator = amount_in_with_fee * reserve_out
     denominator = reserve_in * 1000 + amount_in_with_fee
     amount_out = numerator // denominator
 
-    return amount_out
+    return int(amount_out)

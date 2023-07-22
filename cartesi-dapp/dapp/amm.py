@@ -82,19 +82,13 @@ class AMM:
         else:
             amount_b_optimal = quote(token_a_desired, reserve_a, reserve_b)
             if amount_b_optimal <= token_b_desired:
-                assert (
-                    amount_b_optimal >= token_b_min
-                ), "UniswapV2Router: INSUFFICIENT_B_AMOUNT"
+                assert amount_b_optimal >= token_b_min, "AMM: INSUFFICIENT_B_AMOUNT"
                 amount_a = int(token_a_desired)
                 amount_b = int(amount_b_optimal)
             else:
                 amount_a_optimal = quote(token_b_desired, reserve_b, reserve_a)
-                assert (
-                    amount_a_optimal <= token_a_desired
-                ), "UniswapV2Router: INSUFFICIENT_A_AMOUNT"
-                assert (
-                    amount_a_optimal >= token_a_min
-                ), "UniswapV2Router: INSUFFICIENT_A_AMOUNT"
+                assert amount_a_optimal <= token_a_desired, "AMM: INSUFFICIENT_A_AMOUNT"
+                assert amount_a_optimal >= token_a_min, "AMM: INSUFFICIENT_A_AMOUNT"
                 amount_a = int(amount_a_optimal)
                 amount_b = int(token_b_desired)
 
@@ -150,7 +144,7 @@ class AMM:
                 amount_b * total_supply // reserve_b,
             )
 
-        assert liquidity > 0, "UniswapV2Router: INSUFFICIENT_LIQUIDITY_MINTED"
+        assert liquidity > 0, "AMM: INSUFFICIENT_LIQUIDITY_MINTED"
 
         pair.mint(liquidity, to)
 
@@ -182,8 +176,8 @@ class AMM:
         amount_0 = liquidity * reserve_0 // total_supply
         amount_1 = liquidity * reserve_1 // total_supply
 
-        assert amount_0 >= 0, "UniswapV2Router: INSUFFICIENT_LIQUIDITY_BURNED"
-        assert amount_1 >= 0, "UniswapV2Router: INSUFFICIENT_LIQUIDITY_BURNED"
+        assert amount_0 >= 0, "AMM: INSUFFICIENT_LIQUIDITY_BURNED"
+        assert amount_1 >= 0, "AMM: INSUFFICIENT_LIQUIDITY_BURNED"
 
         pair.burn(liquidity, pair_address, timestamp)
 
@@ -194,8 +188,8 @@ class AMM:
             (amount_0, amount_1) if token_0 == token_a else (amount_1, amount_0)
         )
 
-        assert amount_a >= amount_a_min, "UniswapV2Router: INSUFFICIENT_A_AMOUNT"
-        assert amount_b >= amount_b_min, "UniswapV2Router: INSUFFICIENT_B_AMOUNT"
+        assert amount_a >= amount_a_min, "AMM: INSUFFICIENT_A_AMOUNT"
+        assert amount_b >= amount_b_min, "AMM: INSUFFICIENT_B_AMOUNT"
 
         return amount_0, amount_1
 
@@ -213,8 +207,8 @@ class AMM:
         """
         Swap exact tokens for tokens
         """
-        assert len(path) == 2, "UniswapV2Router: INVALID_PATH"
-        assert start >= timestamp, "UniswapV2Router: INVALID_START_TIME"
+        assert len(path) == 2, "AMM: INVALID_PATH"
+        assert start >= timestamp, "AMM: INVALID_START_TIME"
 
         pair = Pair(path[0], path[1])
 
@@ -227,12 +221,10 @@ class AMM:
         if duration == 0:
             (reserve_in, reserve_out) = self.get_reserves(path[0], path[1], start)
             amount_out = get_amount_out(amount_in, reserve_in, reserve_out)
-            assert (
-                amount_out >= amount_out_min
-            ), "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
+            assert amount_out >= amount_out_min, "AMM: INSUFFICIENT_OUTPUT_AMOUNT"
             k_before = reserve_in * reserve_out
             k_after = (reserve_in + amount_in) * (reserve_out - amount_out)
-            assert k_after >= k_before, "UniswapV2Router: K"
+            assert k_after >= k_before, "AMM: K"
             token_0.transfer_from(
                 msg_sender, pair.get_address(), amount_in, 0, timestamp
             )
@@ -349,14 +341,14 @@ class AMM:
             k_after = (reserve_in + token_0_sum - amount_out_token_0) * (
                 reserve_out + token_1_sum - amount_out_token_1
             )
-            assert k_after >= k_before, "UniswapV2Router: K"
+            assert k_after >= k_before, "AMM: K"
 
             # iterate through streams in token_0_streams_within_interval
             for stream in token_0_streams_within_interval:
                 token_1.transfer_from(
                     pair.get_address(),
                     stream["dir"][1],
-                    amount_out_token_1 * stream["amount"] // token_0_sum,
+                    int(amount_out_token_1 * stream["amount"] // token_0_sum),
                     stream["duration"],
                     interval[0],
                     stream["dir"],
@@ -367,7 +359,7 @@ class AMM:
                 token_0.transfer_from(
                     pair.get_address(),
                     stream["dir"][1],
-                    amount_out_token_0 * stream["amount"] // token_1_sum,
+                    int(amount_out_token_0 * stream["amount"] // token_1_sum),
                     stream["duration"],
                     interval[0],
                     stream["dir"],
