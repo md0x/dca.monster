@@ -2,7 +2,9 @@
 
 import { motion } from 'framer-motion'
 
+import { IsWalletConnected } from '@/components/shared/is-wallet-connected'
 import { FADE_DOWN_ANIMATION_VARIANTS } from '@/config/design'
+import { Streams } from './amm/streams'
 import { Swap } from './amm/swap'
 
 export default function Home() {
@@ -48,8 +50,45 @@ export default function Home() {
                   },
                 },
               }}>
+              <IsWalletConnected>
+                <div
+                  className=""
+                  style={{
+                    backgroundImage: "url('/monster.png')",
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
+                    height: '350px',
+                    width: '800px',
+                    position: 'absolute',
+                    opacity: '0.6',
+                    top: '-9px',
+                    left: '-115px',
+                    zIndex: '-100',
+                  }}></div>{' '}
+              </IsWalletConnected>
 
               <Swap />
+            </motion.div>
+          </div>
+
+          <div className="w-[600px]">
+            <motion.div
+              animate="show"
+              className="my-10"
+              initial="hidden"
+              viewport={{ once: true }}
+              whileInView="show"
+              variants={{
+                hidden: {},
+                show: {
+                  transition: {
+                    delayChildren: 0.5,
+                    staggerChildren: 0.15,
+                  },
+                },
+              }}>
+              <Streams />
             </motion.div>
           </div>
         </div>

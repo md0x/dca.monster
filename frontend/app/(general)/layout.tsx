@@ -11,7 +11,7 @@ export default function GeneralLayout({ children }: { children: ReactNode }) {
     <>
       <div className="bg-gradient-dark lg:pb-12' flex min-h-[100vh] flex-col pb-10">
         <Header />
-        <main className="flex-center my-32 flex flex-1 flex-col md:px-10 lg:py-20">{children}</main>
+        <main className="flex-center my-2 flex flex-1 flex-col md:px-10 lg:py-20">{children}</main>
         <div className="fixed bottom-6 left-6">
           <NetworkStatus />
         </div>

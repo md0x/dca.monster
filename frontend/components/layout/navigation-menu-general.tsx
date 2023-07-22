@@ -2,6 +2,9 @@ import { HTMLAttributes } from 'react'
 
 import Image from 'next/image'
 
+import { IsDarkTheme } from '../shared/is-dark-theme'
+import { IsLightTheme } from '../shared/is-light-theme'
+import { LinkComponent } from '../shared/link-component'
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -14,59 +17,12 @@ import {
 import { turboIntegrations } from '@/data/turbo-integrations'
 import { cn } from '@/lib/utils'
 
-import { IsDarkTheme } from '../shared/is-dark-theme'
-import { IsLightTheme } from '../shared/is-light-theme'
-import { LinkComponent } from '../shared/link-component'
-
 export function NavigationMenuGeneral() {
   return (
     <NavigationMenu className="self-center">
       <NavigationMenuList className="w-full">
         <NavigationMenuItem>
-          <NavigationMenuTrigger>Features</NavigationMenuTrigger>
-          <NavigationMenuContent>
-            <ul className="grid gap-3 p-6 md:w-[400px] lg:w-[600px] lg:grid-cols-[.75fr_1fr]">
-              <li className="row-span-3">
-                <NavigationMenuLink asChild>
-                  <div className="relative flex h-full w-full select-none flex-col justify-end overflow-hidden rounded-md bg-gradient-to-b from-emerald-500 to-lime-700 p-6 no-underline outline-none focus:shadow-md">
-                    <div className="absolute top-10 right-0 z-0 h-48 w-48 bg-[url('https://em-content.zobj.net/thumbs/240/twitter/322/high-voltage_26a1.png')] bg-cover opacity-20" />
-                    <div className="z-10">
-                      <h3 className="z-10 mb-2 mt-4 text-lg font-medium text-white">
-                        <span className="text-4xl">⚡️</span>
-                        <br />
-                        Build in Turbo Mode
-                      </h3>
-                      <p className="mb-3 text-sm leading-tight text-white/90">
-                        TurboETH is a Web3 App Template built using Next.js, RainbowKit, SIWE, Disco, and more!
-                      </p>
-                      <p className="text-sm font-bold leading-tight text-white/90">#TurboETH</p>
-                    </div>
-                  </div>
-                </NavigationMenuLink>
-              </li>
-              <li className="flex flex-col gap-4">
-                <LinkComponent href="/dashboard">
-                  <div className="card bg-card-with-hover">
-                    <h3 className="text-lg font-bold">🎛️ Dashboard</h3>
-                    <div className="my-2" />
-                    <p className="text-xs">
-                      The TurboETH Dashboard is a great place to start. It&apos;s where you can see your app&apos;s features, and get started.
-                    </p>
-                  </div>
-                </LinkComponent>
-                <LinkComponent href="/dashboard">
-                  <div className="card bg-card-with-hover">
-                    <h3 className="text-lg font-bold">🔐 Admin</h3>
-                    <div className="my-2" />
-                    <p className="text-xs">The TurboETH Admin area is where you can see your app&apos;s users.</p>
-                  </div>
-                </LinkComponent>
-              </li>
-            </ul>
-          </NavigationMenuContent>
-        </NavigationMenuItem>
-        <NavigationMenuItem>
-          <NavigationMenuTrigger>Integrations</NavigationMenuTrigger>
+          <NavigationMenuTrigger>ERC20</NavigationMenuTrigger>
           <NavigationMenuContent>
             <ul className="grid w-[600px] gap-3 p-4 md:grid-cols-2">
               {Object.values(turboIntegrations).map((component) => (
@@ -76,11 +32,6 @@ export function NavigationMenuGeneral() {
               ))}
             </ul>
           </NavigationMenuContent>
-        </NavigationMenuItem>
-        <NavigationMenuItem>
-          <LinkComponent href="https://docs.turboeth.xyz/overview">
-            <NavigationMenuLink className={navigationMenuTriggerStyle()}>Documentation</NavigationMenuLink>
-          </LinkComponent>
         </NavigationMenuItem>
       </NavigationMenuList>
     </NavigationMenu>
@@ -112,7 +63,7 @@ const ListItem = ({ className, href, name, imgLight, imgDark, children, ...props
             <Image alt="Etherscan logo" className="mb-3 h-7 w-7 rounded-full" height={100} src={imgLight} width={100} />
           </IsDarkTheme>
           <div className="text-sm font-medium leading-none">{name}</div>
-          <p className="text-sm leading-snug text-slate-500 line-clamp-2 dark:text-slate-400">{children}</p>
+          <p className="line-clamp-2 text-sm leading-snug text-slate-500 dark:text-slate-400">{children}</p>
         </LinkComponent>
       </NavigationMenuLink>
     </li>

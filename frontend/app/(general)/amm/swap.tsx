@@ -8,13 +8,14 @@ import { WalletConnect } from '@/components/blockchain/wallet-connect'
 import { IsWalletConnected } from '@/components/shared/is-wallet-connected'
 import { IsWalletDisconnected } from '@/components/shared/is-wallet-disconnected'
 
-import { useBalanceDetails } from '@/hooks/useBalanceDetails'
-import { useDynamicBalances } from '@/hooks/useDynamicBalances'
-import { useGetAmmTokens } from '@/hooks/useGetAmmTokens'
 import { useCartesiInputBoxAddInput, useErc20Decimals, usePrepareCartesiInputBoxAddInput } from '@/lib/generated/blockchain'
 import { formatUnits, parseUnits } from 'viem'
 import { SelectToken } from './selectToken'
 import { getCartesiAddresses, getSwapBody } from './utils'
+import { useDynamicBalances } from '@/hooks/useDynamicBalances'
+import { useBalanceDetails } from '@/hooks/useBalanceDetails'
+import { useGetAmmTokens } from '@/hooks/useGetAmmTokens'
+import { useQuote } from '@/hooks/useQuote'
 
 export function SwapTokens() {
   const chainId = useChainId()
@@ -51,6 +52,8 @@ export function SwapTokens() {
     address: tokenTwo as Address,
     chainId,
   })
+
+  const { data: quote } = useQuote(tokenOne, tokenTwo, parseUnits(`${Number(amountOne)}`, decimalsOne || 18).toString())
 
   const dateStringToTimestamp = (date: string) => {
     return Math.floor(Date.parse(date) / 1000)
@@ -106,7 +109,7 @@ export function SwapTokens() {
       </div>
       <div className="flex w-full">
         <div className="flex-grow w-7/10 pr-1 relative">
-          <input {...register('amountTwo')} className="input" type="number" />
+          <input value={Number(formatUnits(BigInt(quote), decimalsTwo || 18)).toLocaleString()} className="input" type="string" disabled={true} />
           <span className="absolute top-[15px] right-[40px] text-gray-500">
             Balance: {Number(formatUnits(dynamicBalancesTokenTwo.balance || BigInt(0), decimalsTwo || 18)).toLocaleString()}
           </span>
@@ -168,7 +171,6 @@ export function Swap() {
           <hr className="my-4" />
           <div className="flex items-center justify-between">
             <h3 className="text-center">Stream swap</h3>
-            <p className="text-center text-sm text-gray-500">Deploy a new mintable ERC20 token to any blockchain</p>
           </div>
         </div>
       </IsWalletConnected>

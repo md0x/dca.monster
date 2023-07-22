@@ -4,10 +4,6 @@ import { HTMLAttributes } from 'react'
 
 import Image from 'next/image'
 
-import { siteConfig } from '@/config/site'
-import useScroll from '@/lib/hooks/use-scroll'
-import { cn } from '@/lib/utils'
-
 import { NavigationMenuGeneral } from './navigation-menu-general'
 import { UserDropdown } from './user-dropdown'
 import BranchButtonLoginOrAccount from '../../integrations/siwe/components/branch-button-login-or-account'
@@ -17,6 +13,9 @@ import { IsLightTheme } from '../shared/is-light-theme'
 import { IsMobile } from '../shared/is-mobile'
 import { LinkComponent } from '../shared/link-component'
 import { ThemeToggle } from '../shared/theme-toggle'
+import { siteConfig } from '@/config/site'
+import useScroll from '@/lib/hooks/use-scroll'
+import { cn } from '@/lib/utils'
 
 export function Header({ className, ...props }: HTMLAttributes<HTMLElement>) {
   const scrolled = useScroll(50)
@@ -60,12 +59,6 @@ export function Header({ className, ...props }: HTMLAttributes<HTMLElement>) {
           <NavigationMenuGeneral />
         </div>
         <div className="flex items-center gap-4">
-          <BranchButtonLoginOrAccount classNameButtonLogin="menu-item colormode" classNameButtonLogout="menu-item" />
-          <LinkComponent className="flex items-center" href="/dashboard">
-            <button className="btn btn-pill bg-gradient-button hover:scale-105 hover:shadow-lg">
-              <span className="px-2">Dashboard</span>
-            </button>
-          </LinkComponent>
           <ThemeToggle />
         </div>
       </IsDesktop>

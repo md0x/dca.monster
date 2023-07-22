@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlparse
 
 import requests
 from dapp.amm import AMM
+from dapp.ammlibrary import get_amount_out
 from dapp.constants import ZERO_ADDRESS
 from dapp.eth_abi_ext import decode_packed
 from dapp.streamabletoken import StreamableToken
@@ -385,6 +386,31 @@ def handle_inspect(data):
                 rollup_server + "/report",
                 json={"payload": str2hex(json.dumps(list(unique_tokens)))},
             )
+        if url.path == "quote":
+            try:
+                query_params = parse_qs(url.query)
+                token_in = to_checksum_address(
+                    query_params.get("token_in", [ZERO_ADDRESS])[0]
+                )
+                token_out = to_checksum_address(
+                    query_params.get("token_out", [ZERO_ADDRESS])[0]
+                )
+                amount_in = int(query_params.get("amount_in", [0])[0])
+                timestamp = int(query_params.get("timestamp", [0])[0])
+                (reserve_in, reserve_out) = AMM().get_reserves(
+                    token_in, token_out, timestamp
+                )
+                amount_out = get_amount_out(amount_in, reserve_in, reserve_out)
+                response = requests.post(
+                    rollup_server + "/report",
+                    json={"payload": str2hex(str(amount_out))},
+                )
+            except Exception as e:
+                response = requests.post(
+                    rollup_server + "/report",
+                    json={"payload": str2hex("0")},
+                )
+
         if not response:
             response = requests.post(
                 rollup_server + "/report",
