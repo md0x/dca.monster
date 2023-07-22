@@ -346,7 +346,7 @@ def handle_inspect(data):
             wallet = query_params.get("wallet", [ZERO_ADDRESS])
             token = StreamableToken(token_address[0])
             token_storage = token.get_storage()
-            streams = token_storage["streamss"]
+            streams = token_storage["streams"]
 
             # Convert amounts to strings in the streams
             converted_streams = {
