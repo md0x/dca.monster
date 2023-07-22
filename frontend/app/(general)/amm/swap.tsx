@@ -1,16 +1,20 @@
 import { useState } from 'react'
 
 import { useForm } from 'react-hook-form'
-import { Address, useAccount, useChainId } from 'wagmi'
+import { Address, useAccount, useChainId, useWaitForTransaction } from 'wagmi'
 
 import { ContractWriteButton } from '@/components/blockchain/contract-write-button'
 import { WalletConnect } from '@/components/blockchain/wallet-connect'
 import { IsWalletConnected } from '@/components/shared/is-wallet-connected'
 import { IsWalletDisconnected } from '@/components/shared/is-wallet-disconnected'
 
-import { useErc20Decimals } from '@/lib/generated/blockchain'
-
+import { useBalanceDetails } from '@/hooks/useBalanceDetails'
+import { useDynamicBalances } from '@/hooks/useDynamicBalances'
 import { useGetAmmTokens } from '@/hooks/useGetAmmTokens'
+import { useCartesiInputBoxAddInput, useErc20Decimals, usePrepareCartesiInputBoxAddInput } from '@/lib/generated/blockchain'
+import { formatUnits, parseUnits } from 'viem'
+import { SelectToken } from './selectToken'
+import { getCartesiAddresses, getSwapBody } from './utils'
 
 export function SwapTokens() {
   const chainId = useChainId()
@@ -19,6 +23,11 @@ export function SwapTokens() {
   const [tokenTwo, setTokenTwo] = useState<string>('')
 
   const { data: tokens } = useGetAmmTokens()
+  const { data: balanceDetails } = useBalanceDetails(tokens)
+  const { data: dynamicBalancesTokenOne } = useDynamicBalances(balanceDetails, tokenOne)
+  const { data: dynamicBalancesTokenTwo } = useDynamicBalances(balanceDetails, tokenTwo)
+
+  const cartesiAddresses = getCartesiAddresses(chainId)
 
   const { register, handleSubmit, watch, setValue } = useForm({
     defaultValues: { instantSwap: false, startDate: '', endDate: '', amountOne: 0, amountTwo: 0, now: false, tokenOne: '', tokenTwo: '' },
@@ -52,19 +61,59 @@ export function SwapTokens() {
   const duration = instantSwap ? 0 : effectiveEndDate - effectiveStartDate
   const startDateSend = nowOption || instantSwap ? 0 : effectiveStartDate
 
+  const { config: configSwap } = usePrepareCartesiInputBoxAddInput({
+    chainId,
+    address: cartesiAddresses.inputBox as Address,
+    args: [
+      cartesiAddresses.dapp as Address,
+      getSwapBody(
+        parseUnits(`${Number(amountOne)}`, decimalsOne || 18),
+        BigInt(0),
+        [tokenOne as string, tokenTwo as string],
+        duration,
+        startDateSend,
+        accountAddress as string
+      ),
+    ],
+    enabled:
+      !!tokenOne &&
+      !!tokenTwo &&
+      tokenOne !== tokenTwo &&
+      !!amountOne &&
+      (!!instantSwap || !!nowOption || !!startDate) &&
+      (!!instantSwap || !!endDate) &&
+      (!!instantSwap || effectiveStartDate <= effectiveEndDate),
+  })
+
+  const { data: dataSwap, write: writeSwap, isLoading: isLoadingSwap } = useCartesiInputBoxAddInput(configSwap)
+
+  const { isLoading: isLoadingTxSwap } = useWaitForTransaction({
+    hash: dataSwap?.hash,
+  })
+
   return (
-    <form className="flex w-full flex-col gap-4" onSubmit={() => console.log('yes')}>
+    <form className="flex w-full flex-col gap-4" onSubmit={handleSubmit(() => writeSwap?.())}>
       <div className="flex w-full">
         <div className="flex-grow w-7/10 pr-1 relative">
           <input {...register('amountOne')} className="input" type="number" />
+          <span className="absolute top-[15px] right-[40px] text-gray-500">
+            Balance: {Number(formatUnits(dynamicBalancesTokenOne.balance || BigInt(0), decimalsOne || 18)).toLocaleString()}
+          </span>
         </div>
-        <div className="w-3/10 pl-1">"Select Token"</div>
+        <div className="w-3/10 pl-1">
+          <SelectToken onSelectToken={setTokenOne} />
+        </div>
       </div>
       <div className="flex w-full">
         <div className="flex-grow w-7/10 pr-1 relative">
           <input {...register('amountTwo')} className="input" type="number" />
+          <span className="absolute top-[15px] right-[40px] text-gray-500">
+            Balance: {Number(formatUnits(dynamicBalancesTokenTwo.balance || BigInt(0), decimalsTwo || 18)).toLocaleString()}
+          </span>
         </div>
-        <div className="w-3/10 pl-1">"Select Token"</div>
+        <div className="w-3/10 pl-1">
+          <SelectToken onSelectToken={setTokenTwo} />
+        </div>
       </div>
       <div className="flex items-center">
         <input {...register('instantSwap')} type="checkbox" id="instantSwap" />
@@ -103,7 +152,7 @@ export function SwapTokens() {
           />
         </div>
       </div>
-      <ContractWriteButton isLoadingTx={false} isLoadingWrite={false} loadingTxText="Swapping..." write={true}>
+      <ContractWriteButton isLoadingTx={isLoadingTxSwap} isLoadingWrite={isLoadingSwap} loadingTxText="Swapping..." write={!!writeSwap}>
         Swap
       </ContractWriteButton>
     </form>
