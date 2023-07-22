@@ -19,10 +19,12 @@ from urllib.parse import parse_qs, urlparse
 
 import requests
 from dapp.amm import AMM
+from dapp.constants import ZERO_ADDRESS
 from dapp.eth_abi_ext import decode_packed
 from dapp.streamabletoken import StreamableToken
 from dapp.util import hex_to_str
 from eth_abi.abi import encode
+from eth_utils import to_checksum_address
 
 logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
@@ -178,7 +180,7 @@ def handle_action(data):
         elif payload["method"] == "unwrap":
             token_address = payload["args"]["token"]
             token = StreamableToken(payload["args"]["token"])
-            amount = int(data["metadata"]["amount"])
+            amount = int(payload["args"]["amount"])
             msg_sender = data["metadata"]["msg_sender"]
             token.burn(
                 amount=amount,
@@ -202,12 +204,40 @@ def handle_action(data):
         elif payload["method"] == "cancel_stream":
             token = StreamableToken(payload["args"]["token"])
             stream_id_to_cancel = payload["args"]["stream_id"]
+            parent_id_to_cancel = payload["args"]["parent_id"]
 
             # TODO move this logic somewhere else
             amm_pairs = AMM().get_storage()["pairs"]
             streams = token.get_storage()["streams"]
 
-            if streams.get(stream_id_to_cancel) is not None:
+            if parent_id_to_cancel is not None:
+                related_streams = {
+                    stream_id: stream
+                    for stream_id, stream in streams.items()
+                    if stream.get("parent_id", "") == parent_id_to_cancel
+                    and to_checksum_address(stream["from"])
+                    == to_checksum_address(data["metadata"]["msg_sender"])
+                }
+                # Cancel all related streams
+                pairs_to_recalculate = set()
+                for stream_id, stream in related_streams.items():
+                    token.cancel_stream(
+                        stream_id,
+                        data["metadata"]["msg_sender"],
+                        int(data["metadata"]["timestamp"]),
+                    )
+                    # Recalculate AMM pair if needed
+                    if amm_pairs.get(stream["to"]) is not None:
+                        pairs_to_recalculate.add(stream["to"])
+                # Recalculate AMM pairs
+                for pair_address in pairs_to_recalculate:
+                    pair = amm_pairs.get(pair_address)
+                    AMM().recalculate_pair(
+                        pair.get("token_0"),
+                        pair.get("token_1"),
+                        int(data["metadata"]["timestamp"]),
+                    )
+            elif streams.get(stream_id_to_cancel) is not None:
                 stream = streams.get(stream_id_to_cancel)
                 token.cancel_stream(
                     stream_id_to_cancel,
@@ -283,25 +313,70 @@ def handle_inspect(data):
     logger.info("Adding report")
     # decode payload as a URL
     url = urlparse(hex2str(data["payload"]))
-    if url.path == "balance":
-        # parse query parameters
-        query_params = parse_qs(url.query)
-        token_address = query_params.get("token")
-        wallet = query_params.get("wallet")
+    amm, balances = get_storage()
 
-        if not token_address or not wallet:
-            return requests.post(
-                rollup_server + "/report", json={"error": "Missing query parameters"}
+    response = None
+    try:
+        if url.path == "balance":
+            # parse query parameters
+            query_params = parse_qs(url.query)
+            token_address = query_params.get("token", [ZERO_ADDRESS])
+            wallet = query_params.get("wallet", [ZERO_ADDRESS])
+            timestamp = query_params.get("timestamp", [0])
+
+            if not token_address or not wallet:
+                return requests.post(
+                    rollup_server + "/report",
+                    json={"error": "Missing query parameters"},
+                )
+
+            token = StreamableToken(token_address[0])
+
+            response = requests.post(
+                rollup_server + "/report",
+                json={
+                    "payload": str2hex(
+                        str(token.balance_of(wallet[0], int(float(timestamp[0]))))
+                    )
+                },
+            )
+        if url.path == "balance_details":
+            query_params = parse_qs(url.query)
+            token_address = query_params.get("token", [ZERO_ADDRESS])
+            wallet = query_params.get("wallet", [ZERO_ADDRESS])
+            token = StreamableToken(token_address[0])
+            token_storage = token.get_storage()
+            streams = token_storage["streamss"]
+
+            # Convert amounts to strings in the streams
+            converted_streams = {
+                stream_id: {
+                    key: str(value) if key == "amount" else value
+                    for key, value in stream.items()
+                }
+                for stream_id, stream in streams.items()
+            }
+
+            response = requests.post(
+                rollup_server + "/report",
+                json={"payload": str2hex(json.dumps(converted_streams))},
+            )
+        if not response:
+            response = requests.post(
+                rollup_server + "/report",
+                json={"payload": str2hex(f"Unknown path {url.path}")},
             )
 
-        token = StreamableToken(token_address[0])
-
+        logger.info(f"Received report status {response.status_code}")
+    except Exception as e:
+        msg = f"Error processing data {data}\n{traceback.format_exc()}"
+        logger.error(msg)
         response = requests.post(
-            rollup_server + "/report",
-            json={"payload": str2hex(str(token.balance_of(wallet[0])))},
+            rollup_server + "/report", json={"payload": str2hex(msg)}
         )
-
-    logger.info(f"Received report status {response.status_code}")
+        logger.info(
+            f"Received report status {response.status_code} body {response.content}"
+        )
     return "accept"
 
 

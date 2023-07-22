@@ -344,6 +344,7 @@ class AMM:
                     interval[0],
                     timestamp,
                     stream["dir"],
+                    stream.get("parent_id", ""),
                 )
 
             # iterate through streams in token_1_streams_within_interval
@@ -356,6 +357,7 @@ class AMM:
                     interval[0],
                     timestamp,
                     stream["dir"],
+                    stream.get("parent_id", ""),
                 )
 
     def swap_exact_tokens_for_tokens(

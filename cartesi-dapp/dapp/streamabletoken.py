@@ -111,6 +111,8 @@ class StreamableToken:
 
         assert timestamp is not None
 
+        self.consolidate_streams(timestamp)
+
         if self.balance_of(wallet, timestamp) < int(amount):
             raise ValueError("Insufficient balance to burn.")
 
@@ -120,16 +122,15 @@ class StreamableToken:
         # Decrement total supply
         storage["totalSupply"] -= int(amount)
 
-    def balance_of(self, wallet: str, timestamp: int = None):
+        # Save storage
+        self.save_storage(storage)
+
+    def balance_of(self, wallet: str, timestamp: int):
         """
         Calculate the balance of a given wallet at a specific timestamp.
         If no timestamp is given, use the current time.
         """
         wallet = to_checksum_address(wallet)
-
-        # Use the current time if no timestamp is given
-        if timestamp is None:
-            timestamp = int(time.time())
 
         # Get the balance and streams for this token's address
         storage = self.get_storage()
@@ -172,6 +173,7 @@ class StreamableToken:
         start: int,
         timestamp: int,
         dir: "list[str]" = [],
+        parent_id: str = "",
     ):
         """
         Create a new stream transferring a given amount of tokens from the sender to the receiver
@@ -206,18 +208,15 @@ class StreamableToken:
             "start": start,
             "duration": int(duration),
             "dir": dir,
+            "parent_id": parent_id,
         }
 
         self.save_storage(storage)
 
-    def consolidate_streams(self, until_timestamp: int = None):
+    def consolidate_streams(self, until_timestamp):
         """
         Accrue all the sent and received tokens from streams until a specific timestamp.
         """
-
-        # Use the current time if no timestamp is given
-        if until_timestamp is None:
-            until_timestamp = int(time.time())
 
         # Get the balance and streams for this token's address
         storage = self.get_storage()
@@ -327,6 +326,7 @@ class StreamableToken:
                     new_stream_id = (
                         f"{stream['from']}-{stream['to']}-{str(uuid.uuid4())}"
                     )
+                    parent_id = stream.get("parent_id", "")
                     new_streams[new_stream_id] = {
                         "from": stream["from"],
                         "to": stream["to"],
@@ -334,6 +334,7 @@ class StreamableToken:
                         "start": int(start),
                         "duration": int(duration),
                         "dir": stream["dir"],
+                        "parent_id": parent_id if parent_id != "" else stream_id,
                     }
 
         # save new streams
