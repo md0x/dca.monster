@@ -258,7 +258,7 @@ class StreamableToken:
 
         self.save_storage(storage)
 
-    def cancel_stream(self, stream_id: str, sender: str):
+    def cancel_stream(self, stream_id: str, sender: str, timestamp):
         """
         Allow a sender to cancel a specific stream.
         """
@@ -266,7 +266,7 @@ class StreamableToken:
 
         # Accrue the balances up to the current time to account for the canceled stream
         # If the stream is not found, the balances will be accrued up to the current time
-        self.consolidate_streams()
+        self.consolidate_streams(timestamp)
 
         # Load existing balances
         storage = self.get_storage()

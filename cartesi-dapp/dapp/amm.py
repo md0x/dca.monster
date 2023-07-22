@@ -7,6 +7,7 @@ from dapp.ammlibrary import get_amount_out, quote
 from dapp.constants import ZERO_ADDRESS
 from dapp.pair import Pair
 from dapp.streamabletoken import StreamableToken
+from eth_utils import to_checksum_address
 
 empty_storage = {"pairs": {}}
 
@@ -31,19 +32,14 @@ class AMM:
         """
         with open("./storage/amm.json", "r") as f:
             data = json.load(f)
-        return data.get(self._address, empty_storage)
+        return data
 
     def save_storage(self, storage):
         """
         Save the storage file.
         """
-        # Load existing balances
-        with open("./storage/amm.json", "r") as f:
-            existing_balances = json.load(f)
-
-        # Save updated balances
         with open("./storage/amm.json", "w") as f:
-            json.dump(existing_balances, f, indent=4)
+            json.dump(storage, f, indent=4)
 
     def clear_storage(self):
         """
@@ -51,10 +47,25 @@ class AMM:
         """
         self.save_storage(empty_storage)
 
+    def store_pair(self, pair):
+        """
+        Store a pair in the storage file.
+        """
+        storage = self.get_storage()
+        # if storage is empty, initialize it with empty storage
+        if len(storage) == 0:
+            storage = empty_storage
+        storage["pairs"][pair._address] = {
+            "token_0": pair.get_tokens()[0],
+            "token_1": pair.get_tokens()[1],
+        }
+        self.save_storage(storage)
+
     def get_reserves(self, token_a, token_b, timestamp):
         """
         Get the reserves of a pair at a given timestamp.
         """
+        token_a, token_b = to_checksum_address(token_a), to_checksum_address(token_b)
         pair = Pair(token_a, token_b)
         (reserve_0, reserve_1) = pair.get_reserves(timestamp)
         return (
@@ -74,6 +85,7 @@ class AMM:
         to,
         timestamp,
     ):
+        token_a, token_b = to_checksum_address(token_a), to_checksum_address(token_b)
         (reserve_a, reserve_b) = self.get_reserves(token_a, token_b, timestamp)
 
         if reserve_a == 0 and reserve_b == 0:
@@ -109,6 +121,7 @@ class AMM:
         """
         Add liquidity to a pool
         """
+        token_a, token_b = to_checksum_address(token_a), to_checksum_address(token_b)
         pair = Pair(token_a, token_b)
         pair_address = pair.get_address()
         (reserve_a, reserve_b) = self.get_reserves(token_a, token_b, timestamp)
@@ -148,6 +161,8 @@ class AMM:
 
         pair.mint(liquidity, to)
 
+        self.store_pair(pair)
+
         return liquidity
 
     def remove_liquidity(
@@ -164,6 +179,7 @@ class AMM:
         """
         Remove liquidity from a pool
         """
+        token_a, token_b = to_checksum_address(token_a), to_checksum_address(token_b)
         pair = Pair(token_a, token_b)
         pair_address = pair.get_address()
         pair.transfer_from(msg_sender, pair_address, liquidity, 0, timestamp)
@@ -193,53 +209,18 @@ class AMM:
 
         return amount_0, amount_1
 
-    def swap_exact_tokens_for_tokens(
-        self,
-        amount_in,
-        amount_out_min,
-        path,
-        start,
-        duration,
-        to,
-        msg_sender,
-        timestamp,
-    ):
+    def recalculate_pair(self, token_0_address, token_1_address, timestamp):
         """
-        Swap exact tokens for tokens
+        Recalculate pair reserves and streams
         """
-        assert len(path) == 2, "AMM: INVALID_PATH"
-        assert start >= timestamp, "AMM: INVALID_START_TIME"
+        token_0_address, token_1_address = to_checksum_address(
+            token_0_address
+        ), to_checksum_address(token_1_address)
 
-        pair = Pair(path[0], path[1])
+        pair = Pair(token_0_address, token_1_address)
 
-        token_0 = StreamableToken(path[0])
-        token_1 = StreamableToken(path[1])
-
-        token_0.consolidate_streams(timestamp)
-        token_1.consolidate_streams(timestamp)
-
-        if duration == 0:
-            (reserve_in, reserve_out) = self.get_reserves(path[0], path[1], start)
-            amount_out = get_amount_out(amount_in, reserve_in, reserve_out)
-            assert amount_out >= amount_out_min, "AMM: INSUFFICIENT_OUTPUT_AMOUNT"
-            k_before = reserve_in * reserve_out
-            k_after = (reserve_in + amount_in) * (reserve_out - amount_out)
-            assert k_after >= k_before, "AMM: K"
-            token_0.transfer_from(
-                msg_sender, pair.get_address(), amount_in, 0, timestamp
-            )
-            token_1.transfer_from(pair.get_address(), to, amount_out, 0, timestamp)
-            (reserve_in, reserve_out) = self.get_reserves(path[0], path[1], start)
-            print("reserve_in", reserve_in)
-        else:
-            token_0.transfer_from(
-                msg_sender,
-                pair.get_address(),
-                amount_in,
-                int(duration),
-                int(start),
-                [msg_sender, to],
-            )
+        token_0 = StreamableToken(token_0_address)
+        token_1 = StreamableToken(token_1_address)
 
         token_0.consolidate_streams(timestamp)
         token_1.consolidate_streams(timestamp)
@@ -324,7 +305,9 @@ class AMM:
                 stream["amount"] for stream in token_1_streams_within_interval
             )
             # Get reserves at start of interval
-            (reserve_in, reserve_out) = self.get_reserves(path[0], path[1], interval[0])
+            (reserve_in, reserve_out) = self.get_reserves(
+                token_0_address, token_1_address, interval[0]
+            )
             amount_out_token_1 = (
                 get_amount_out(token_0_sum, reserve_in, reserve_out)
                 if token_0_sum != 0
@@ -365,4 +348,51 @@ class AMM:
                     stream["dir"],
                 )
 
-        return "ok"
+    def swap_exact_tokens_for_tokens(
+        self,
+        amount_in,
+        amount_out_min,
+        path,
+        start,
+        duration,
+        to,
+        msg_sender,
+        timestamp,
+    ):
+        """
+        Swap exact tokens for tokens
+        """
+        assert len(path) == 2, "AMM: INVALID_PATH"
+        assert start >= timestamp, "AMM: INVALID_START_TIME"
+
+        pair = Pair(path[0], path[1])
+
+        token_0 = StreamableToken(path[0])
+        token_1 = StreamableToken(path[1])
+
+        token_0.consolidate_streams(timestamp)
+        token_1.consolidate_streams(timestamp)
+
+        if duration == 0:
+            (reserve_in, reserve_out) = self.get_reserves(path[0], path[1], start)
+            amount_out = get_amount_out(amount_in, reserve_in, reserve_out)
+            assert amount_out >= amount_out_min, "AMM: INSUFFICIENT_OUTPUT_AMOUNT"
+            k_before = reserve_in * reserve_out
+            k_after = (reserve_in + amount_in) * (reserve_out - amount_out)
+            assert k_after >= k_before, "AMM: K"
+            token_0.transfer_from(
+                msg_sender, pair.get_address(), amount_in, 0, timestamp
+            )
+            token_1.transfer_from(pair.get_address(), to, amount_out, 0, timestamp)
+            (reserve_in, reserve_out) = self.get_reserves(path[0], path[1], start)
+        else:
+            token_0.transfer_from(
+                msg_sender,
+                pair.get_address(),
+                amount_in,
+                int(duration),
+                int(start),
+                [msg_sender, to],
+            )
+
+        self.recalculate_pair(path[0], path[1], timestamp)
