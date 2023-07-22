@@ -37,6 +37,7 @@
   },
   "packageManager": "pnpm@7.1.8",
   "dependencies": {
+    "@cartesi/rollups": "^0.9.1",
     "@connext/nxtp-utils": "^2.0.3",
     "@connext/sdk": "2.0.4-alpha.2",
     "@lit-protocol/lit-node-client": "2.1.161",
