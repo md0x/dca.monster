@@ -3,5 +3,3 @@ frontend-console
 __pycache__
 venv
 storage
-tests
-Makefile
