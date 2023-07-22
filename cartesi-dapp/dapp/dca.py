@@ -356,10 +356,34 @@ def handle_inspect(data):
                 }
                 for stream_id, stream in streams.items()
             }
-
+            balance_details = {
+                "balance": str(token_storage["balances"].get(wallet[0], 0)),
+                "streams": {
+                    stream_id: stream
+                    for stream_id, stream in converted_streams.items()
+                    if to_checksum_address(stream["from"]) == wallet[0]
+                    or to_checksum_address(stream["to"])
+                    == to_checksum_address(wallet[0])
+                },
+            }
             response = requests.post(
                 rollup_server + "/report",
-                json={"payload": str2hex(json.dumps(converted_streams))},
+                json={"payload": str2hex(json.dumps(balance_details))},
+            )
+        if url.path == "tokens":
+            unique_tokens = set()
+            # Iterate through each pair
+            for key, pair in amm.get("pairs", {}).items():
+                # Add the token addresses to the set
+                # unique_tokens.add(key)
+                unique_tokens.add(pair["token_0"])
+                unique_tokens.add(pair["token_1"])
+            for key in balances.keys():
+                # Add the token addresses to the set
+                unique_tokens.add(key)
+            response = requests.post(
+                rollup_server + "/report",
+                json={"payload": str2hex(json.dumps(list(unique_tokens)))},
             )
         if not response:
             response = requests.post(
