@@ -36,7 +36,10 @@ cd frontend
 pnpm install
 pnpm run dev
 ```
-
+Run Cartesi locally in prod mode:
+```
+make dev
+```
 Run Cartesi in host mode:
 In one terminal:
 
