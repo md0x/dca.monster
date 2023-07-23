@@ -52,7 +52,7 @@ cd cartesi-dapp
 make host-python
 ```
 
-More details of how to run Cartesi rollup can be found [here]("cartesi-dapp/README.md").
+More details of how to run Cartesi rollup can be found [here](cartesi-dapp/README.md).
 
 ## Project Description
 
