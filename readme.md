@@ -34,6 +34,18 @@ pnpm install
 pnpm run dev
 ```
 
+Run Cartesi in host mode:
+In one terminal:
+```
+cd cartesi-dapp
+make host
+```
+In another terminal:
+```
+cd cartesi-dapp
+make host-python
+```
+
 ## Project Description
 
 ### Introduction
