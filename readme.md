@@ -67,7 +67,7 @@ Current on-chain DCA solutions suffer from:
 
 DCA.Monster merges with ERC20 streams to efficiently and granularly implement DCA on-chain. It optimizes capital and gas usage, integrates with DEXs, and provides both granular pricing and flexible timing.
 
-Without Cartesi's rollups technology, such an implementation would be computationally expensive due to the complex calculations required for token pricing. However, Cartesi's rollups enable us to perform these computations off-chain on any device, with the results verified on-chain.
+Without Cartesi's rollups technology, such an implementation would be computationally expensive due to the complex calculations required for  AMM streams recalculations. However, Cartesi's rollups enable us to perform these computations off-chain on any device, with the results verified on-chain.
 
 ## Implementation Details
 
