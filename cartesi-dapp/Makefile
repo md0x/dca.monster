@@ -13,15 +13,19 @@ host-python:
 hash:
 	docker buildx bake -f docker-bake.hcl -f docker-bake.override.hcl machine --load
 deploy-gnosis-chiado:
-	MNEMONIC=$$MNEMONIC \
+	MNEMONIC="trap basket portion ride cheap uncle benefit keen quantum smoke burden turtle" \
 	NETWORK=gnosis_chiado \
 	RPC_URL=https://rpc.chiadochain.net \
 	DAPP_NAME=dca.monster docker compose -f ./deploy-testnet.yml up
-deploy-polygon-zkevm-testnet:
-	MNEMONIC=$$MNEMONIC \
-	NETWORK=polygon_zk_testnet \
-	RPC_URL=https://rpc.public.zkevm-test.net \
-	DAPP_NAME=dca.monster docker compose -f ./deploy-testnet.yml up
+run-chidao:
+	RPC_URL=https://rpc.chiado.gnosis.gateway.fm \
+	WSS_URL=wss://gnosis-chiado.blastapi.io/ad45cbd2-f720-4c51-8bae-a0b73215f36d \
+	NETWORK=chiado \
+	BLOCK_CONFIRMATIONS=1 \
+	BLOCK_CONFIRMATIONS_TX=2 \
+	CHAIN_ID=80001 \
+	MNEMONIC="trap basket portion ride cheap uncle benefit keen quantum smoke burden turtle" \
+	DAPP_NAME=dca.monster docker compose -f ./docker-compose-testnet.yml -f ./docker-compose.override.yml up
 fund-alice:
 	cast send 0x278639F7912F119EE7DF93Fb12A3aD3148987ce3 --value 10ether --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 fund-bob:
